@@ -1,137 +1,116 @@
 import logging
+import os
 from decimal import Decimal
 from typing import Any, Dict
 
 import pandas as pd
+from pydantic import Field
 
+from hummingbot.client.config.config_data_types import BaseClientModel, ClientFieldData
+from hummingbot.connector.connector_base import ConnectorBase
 from hummingbot.core.data_type.common import OrderType, TradeType
 from hummingbot.core.data_type.order_candidate import OrderCandidate
 from hummingbot.core.event.events import OrderFilledEvent
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 
 
-class SimpleArbitrage(ScriptStrategyBase):
-    """
-    BotCamp Cohort: Sept 2022
-    Design Template: https://hummingbot-foundation.notion.site/Simple-Arbitrage-51b2af6e54b6493dab12e5d537798c07
-    Video: TBD
-    Description:
-    A simplified version of Hummingbot arbitrage strategy, this bot checks the Volume Weighted Average Price for
-    bid and ask in two exchanges and if it finds a profitable opportunity, it will trade the tokens.
-    """
-    order_amount = Decimal("0.01")  # in base asset
-    min_profitability = Decimal("0.002")  # in percentage
-    base = "ETH"
-    quote = "USDT"
-    trading_pair = f"{base}-{quote}"
-    exchange_A = "binance_paper_trade"
-    exchange_B = "kucoin_paper_trade"
+class XEArbConfig(BaseClientModel):
+    script_file_name: str = Field(default_factory=lambda: os.path.basename(__file__))
+    exchange_A: str = Field("binance_paper_trade", client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the first exchange where the bot will trade:"))
+    exchange_B: str = Field("kucoin_paper_trade", client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the second exchange where the bot will trade:"))
+    base: str = Field("ETH", client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the base asset:"))
+    quote: str = Field("USDT", client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the quote asset:"))
+    trading_pair: str = Field("ETH-USDT", client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the trading pair in which the bot will place orders:"))
+    order_amount: Decimal = Field(0.01, client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the order amount (denominated in base asset):"))
+    min_profitability: Decimal = Field(0.002, client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the minimum profitability (in percentage):"))
+    exchange_A_fee: Decimal = Field(0.001, client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the fee percentage for the first exchange:"))
+    exchange_B_fee: Decimal = Field(0.001, client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the fee percentage for the second exchange:"))
 
-    markets = {exchange_A: {trading_pair},
-               exchange_B: {trading_pair}}
+
+class XEArb(ScriptStrategyBase):
+    @classmethod
+    def init_markets(cls, config: XEArbConfig):
+        cls.markets = {config.exchange_A: {config.trading_pair}, config.exchange_B: {config.trading_pair}}
+
+    def __init__(self, connectors: Dict[str, ConnectorBase], config: XEArbConfig):
+        super().__init__(connectors)
+        self.config = config
+        self.total_potential_profit = Decimal(0.0)
 
     def on_tick(self):
-        vwap_prices = self.get_vwap_prices_for_amount(self.order_amount)
+        vwap_prices = self.get_vwap_prices_for_amount(self.config.order_amount)
         proposal = self.check_profitability_and_create_proposal(vwap_prices)
         if len(proposal) > 0:
             proposal_adjusted: Dict[str, OrderCandidate] = self.adjust_proposal_to_budget(proposal)
             self.place_orders(proposal_adjusted)
 
     def get_vwap_prices_for_amount(self, amount: Decimal):
-        bid_ex_a = self.connectors[self.exchange_A].get_vwap_for_volume(self.trading_pair, False, amount)
-        ask_ex_a = self.connectors[self.exchange_A].get_vwap_for_volume(self.trading_pair, True, amount)
-        bid_ex_b = self.connectors[self.exchange_B].get_vwap_for_volume(self.trading_pair, False, amount)
-        ask_ex_b = self.connectors[self.exchange_B].get_vwap_for_volume(self.trading_pair, True, amount)
+        bid_ex_a = self.connectors[self.config.exchange_A].get_vwap_for_volume(self.config.trading_pair, False, amount)
+        ask_ex_a = self.connectors[self.config.exchange_A].get_vwap_for_volume(self.config.trading_pair, True, amount)
+        bid_ex_b = self.connectors[self.config.exchange_B].get_vwap_for_volume(self.config.trading_pair, False, amount)
+        ask_ex_b = self.connectors[self.config.exchange_B].get_vwap_for_volume(self.config.trading_pair, True, amount)
         vwap_prices = {
-            self.exchange_A: {
+            self.config.exchange_A: {
                 "bid": bid_ex_a.result_price,
                 "ask": ask_ex_a.result_price
             },
-            self.exchange_B: {
+            self.config.exchange_B: {
                 "bid": bid_ex_b.result_price,
                 "ask": ask_ex_b.result_price
             }
         }
         return vwap_prices
 
-    def get_fees_percentages(self, vwap_prices: Dict[str, Any]) -> Dict:
-        # We assume that the fee percentage for buying or selling is the same
-        a_fee = self.connectors[self.exchange_A].get_fee(
-            base_currency=self.base,
-            quote_currency=self.quote,
-            order_type=OrderType.MARKET,
-            order_side=TradeType.BUY,
-            amount=self.order_amount,
-            price=vwap_prices[self.exchange_A]["ask"],
-            is_maker=False
-        ).percent
-
-        b_fee = self.connectors[self.exchange_B].get_fee(
-            base_currency=self.base,
-            quote_currency=self.quote,
-            order_type=OrderType.MARKET,
-            order_side=TradeType.BUY,
-            amount=self.order_amount,
-            price=vwap_prices[self.exchange_B]["ask"],
-            is_maker=False
-        ).percent
-
-        return {
-            self.exchange_A: a_fee,
-            self.exchange_B: b_fee
-        }
-
     def get_profitability_analysis(self, vwap_prices: Dict[str, Any]) -> Dict:
-        fees = self.get_fees_percentages(vwap_prices)
-        buy_a_sell_b_quote = vwap_prices[self.exchange_A]["ask"] * (1 - fees[self.exchange_A]) * self.order_amount - \
-            vwap_prices[self.exchange_B]["bid"] * (1 + fees[self.exchange_B]) * self.order_amount
+        buy_a_sell_b_quote = vwap_prices[self.config.exchange_A]["ask"] * (1 - self.config.exchange_A_fee) * self.config.order_amount - \
+            vwap_prices[self.config.exchange_B]["bid"] * (1 + self.config.exchange_B_fee) * self.config.order_amount
         buy_a_sell_b_base = buy_a_sell_b_quote / (
-            (vwap_prices[self.exchange_A]["ask"] + vwap_prices[self.exchange_B]["bid"]) / 2)
+            (vwap_prices[self.config.exchange_A]["ask"] + vwap_prices[self.config.exchange_B]["bid"]) / 2)
 
-        buy_b_sell_a_quote = vwap_prices[self.exchange_B]["ask"] * (1 - fees[self.exchange_B]) * self.order_amount - \
-            vwap_prices[self.exchange_A]["bid"] * (1 + fees[self.exchange_A]) * self.order_amount
+        buy_b_sell_a_quote = vwap_prices[self.config.exchange_B]["ask"] * (1 - self.config.exchange_B_fee) * self.config.order_amount - \
+            vwap_prices[self.config.exchange_A]["bid"] * (1 + self.config.exchange_A_fee) * self.config.order_amount
 
         buy_b_sell_a_base = buy_b_sell_a_quote / (
-            (vwap_prices[self.exchange_B]["ask"] + vwap_prices[self.exchange_A]["bid"]) / 2)
+            (vwap_prices[self.config.exchange_B]["ask"] + vwap_prices[self.config.exchange_A]["bid"]) / 2)
 
         return {
             "buy_a_sell_b":
                 {
                     "quote_diff": buy_a_sell_b_quote,
                     "base_diff": buy_a_sell_b_base,
-                    "profitability_pct": buy_a_sell_b_base / self.order_amount
+                    "profitability_pct": buy_a_sell_b_base / self.config.order_amount
                 },
             "buy_b_sell_a":
                 {
                     "quote_diff": buy_b_sell_a_quote,
                     "base_diff": buy_b_sell_a_base,
-                    "profitability_pct": buy_b_sell_a_base / self.order_amount
+                    "profitability_pct": buy_b_sell_a_base / self.config.order_amount
                 },
         }
 
     def check_profitability_and_create_proposal(self, vwap_prices: Dict[str, Any]) -> Dict:
         proposal = {}
         profitability_analysis = self.get_profitability_analysis(vwap_prices)
-        if profitability_analysis["buy_a_sell_b"]["profitability_pct"] > self.min_profitability:
+        if profitability_analysis["buy_a_sell_b"]["profitability_pct"] > self.config.min_profitability:
             # This means that the ask of the first exchange is lower than the bid of the second one
-            proposal[self.exchange_A] = OrderCandidate(trading_pair=self.trading_pair, is_maker=False,
+            proposal[self.config.exchange_A] = OrderCandidate(trading_pair=self.trading_pair, is_maker=False,
                                                        order_type=OrderType.MARKET,
-                                                       order_side=TradeType.BUY, amount=self.order_amount,
-                                                       price=vwap_prices[self.exchange_A]["ask"])
-            proposal[self.exchange_B] = OrderCandidate(trading_pair=self.trading_pair, is_maker=False,
+                                                       order_side=TradeType.BUY, amount=self.config.order_amount,
+                                                       price=vwap_prices[self.config.exchange_A]["ask"])
+            proposal[self.config.exchange_B] = OrderCandidate(trading_pair=self.trading_pair, is_maker=False,
                                                        order_type=OrderType.MARKET,
-                                                       order_side=TradeType.SELL, amount=Decimal(self.order_amount),
-                                                       price=vwap_prices[self.exchange_B]["bid"])
-        elif profitability_analysis["buy_b_sell_a"]["profitability_pct"] > self.min_profitability:
+                                                       order_side=TradeType.SELL, amount=Decimal(self.config.order_amount),
+                                                       price=vwap_prices[self.config.exchange_B]["bid"])
+        elif profitability_analysis["buy_b_sell_a"]["profitability_pct"] > self.config.min_profitability:
             # This means that the ask of the second exchange is lower than the bid of the first one
-            proposal[self.exchange_B] = OrderCandidate(trading_pair=self.trading_pair, is_maker=False,
+            proposal[self.config.exchange_B] = OrderCandidate(trading_pair=self.trading_pair, is_maker=False,
                                                        order_type=OrderType.MARKET,
-                                                       order_side=TradeType.BUY, amount=self.order_amount,
-                                                       price=vwap_prices[self.exchange_B]["ask"])
-            proposal[self.exchange_A] = OrderCandidate(trading_pair=self.trading_pair, is_maker=False,
+                                                       order_side=TradeType.BUY, amount=self.config.order_amount,
+                                                       price=vwap_prices[self.config.exchange_B]["ask"])
+            proposal[self.config.exchange_A] = OrderCandidate(trading_pair=self.trading_pair, is_maker=False,
                                                        order_type=OrderType.MARKET,
-                                                       order_side=TradeType.SELL, amount=Decimal(self.order_amount),
-                                                       price=vwap_prices[self.exchange_A]["bid"])
+                                                       order_side=TradeType.SELL, amount=Decimal(self.config.order_amount),
+                                                       price=vwap_prices[self.config.exchange_A]["bid"])
 
         return proposal
 
@@ -166,16 +145,16 @@ class SimpleArbitrage(ScriptStrategyBase):
         balance_df = self.get_balance_df()
         lines.extend(["", "  Balances:"] + ["    " + line for line in balance_df.to_string(index=False).split("\n")])
 
-        vwap_prices = self.get_vwap_prices_for_amount(self.order_amount)
+        vwap_prices = self.get_vwap_prices_for_amount(self.config.order_amount)
         lines.extend(["", "  VWAP Prices for amount"] + ["     " + line for line in
                                                          pd.DataFrame(vwap_prices).to_string().split("\n")])
         profitability_analysis = self.get_profitability_analysis(vwap_prices)
         lines.extend(["", "  Profitability (%)"] + [
-            f"     Buy A: {self.exchange_A} --> Sell B: {self.exchange_B}"] + [
+            f"     Buy A: {self.config.exchange_A} --> Sell B: {self.config.exchange_B}"] + [
             f"          Quote Diff: {profitability_analysis['buy_a_sell_b']['quote_diff']:.7f}"] + [
             f"          Base Diff: {profitability_analysis['buy_a_sell_b']['base_diff']:.7f}"] + [
             f"          Percentage: {profitability_analysis['buy_a_sell_b']['profitability_pct'] * 100:.4f} %"] + [
-            f"     Buy B: {self.exchange_B} --> Sell A: {self.exchange_A}"] + [
+            f"     Buy B: {self.config.exchange_B} --> Sell A: {self.config.exchange_A}"] + [
             f"          Quote Diff: {profitability_analysis['buy_b_sell_a']['quote_diff']:.7f}"] + [
             f"          Base Diff: {profitability_analysis['buy_b_sell_a']['base_diff']:.7f}"] + [
             f"          Percentage: {profitability_analysis['buy_b_sell_a']['profitability_pct'] * 100:.4f} %"
