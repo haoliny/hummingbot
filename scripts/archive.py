@@ -40,7 +40,7 @@ class Archive(ScriptStrategyBase):
     def __init__(self, connectors: Dict[str, ConnectorBase], config: ArchiveConfig):
         super().__init__(connectors)
         self.config = config
-        self.connection = self.connect_to_db()
+        self.connect_to_db()
         self.order_book_trade_event = SourceInfoEventForwarder(self._process_public_trade)
         self.exchanges = ['_'.join(exchange.split("_")[:-2]) for exchange in self.config.exchanges]
         for exchange in self.exchanges:
@@ -53,8 +53,7 @@ class Archive(ScriptStrategyBase):
 
     def connect_to_db(self):
         connection_link = os.environ.get("ARCHIVE_DB_CONNECTION")
-        connection = psycopg2.connect(connection_link)
-        return connection
+        self.connection = psycopg2.connect(connection_link)
 
     def subscribe_to_order_book_trade_event(self):
         for market in self.connectors.values():
@@ -109,10 +108,20 @@ class Archive(ScriptStrategyBase):
                     );
                 """
                 query_create_trades_hypertable = f"SELECT create_hypertable('{exchange}_{symbol_sql}_trade', by_range('timestamp'));"
+
+                book_compress_query = f"ALTER TABLE {exchange}_{symbol_sql}_book SET (timescaledb.compress, timescaledb.compress_orderby = 'timestamp');"
+                trade_compress_query = f"ALTER TABLE {exchange}_{symbol_sql}_trade SET (timescaledb.compress, timescaledb.compress_orderby = 'timestamp');"
+                book_compress_rule_query = f"SELECT add_compression_policy('{exchange}_{symbol_sql}_book', compress_after => INTERVAL '30d');"
+                trade_compress_rule_query = f"SELECT add_compression_policy('{exchange}_{symbol_sql}_trade', compress_after => INTERVAL '90d');"
+
                 cursor.execute(query_create_order_book_table)
                 cursor.execute(query_create_order_book_hypertable)
                 cursor.execute(query_create_trades_table)
                 cursor.execute(query_create_trades_hypertable)
+                cursor.execute(book_compress_query)
+                cursor.execute(trade_compress_query)
+                cursor.execute(book_compress_rule_query)
+                cursor.execute(trade_compress_rule_query)
                 self.connection.commit()
                 self.logger().info(f"Table {exchange}_{symbol}_book created.")
                 self.logger().info(f"Table {exchange}_{symbol}_trade created.")
