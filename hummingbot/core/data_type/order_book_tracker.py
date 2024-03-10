@@ -311,6 +311,7 @@ class OrderBookTracker:
 
                 order_book: OrderBook = self._order_books[trading_pair]
                 order_book.apply_trade(OrderBookTradeEvent(
+                    exchange=trade_message.content["exchange"],
                     trading_pair=trade_message.trading_pair,
                     timestamp=trade_message.timestamp,
                     price=float(trade_message.content["price"]),

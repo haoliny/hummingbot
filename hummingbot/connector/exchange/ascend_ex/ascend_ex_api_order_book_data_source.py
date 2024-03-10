@@ -100,6 +100,7 @@ class AscendExAPIOrderBookDataSource(OrderBookTrackerDataSource):
         for trade_data in raw_message["data"]:
             timestamp: float = trade_data["ts"] / 1000
             message_content = {
+                "exchange": self._connector.name,
                 "trade_id": timestamp,  # trade id isn't provided so using timestamp instead
                 "trading_pair": trading_pair,
                 "trade_type": float(TradeType.BUY.value) if trade_data["bm"] else float(TradeType.SELL.value),

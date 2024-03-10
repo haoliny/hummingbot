@@ -143,6 +143,7 @@ class FundingPaymentCompletedEvent:
 
 
 class OrderBookTradeEvent(NamedTuple):
+    exchange: str
     trading_pair: str
     timestamp: float
     type: TradeType

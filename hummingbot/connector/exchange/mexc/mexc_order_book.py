@@ -65,6 +65,7 @@ class MexcOrderBook(OrderBook):
             msg.update(metadata)
         ts = timestamp
         return OrderBookMessage(OrderBookMessageType.TRADE, {
+            "exchange": "mexc",
             "trading_pair": msg["trading_pair"],
             "trade_type": float(TradeType.SELL.value) if msg["S"] == 2 else float(TradeType.BUY.value),
             "trade_id": msg["t"],

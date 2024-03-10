@@ -78,6 +78,7 @@ class GateIoAPIOrderBookDataSource(OrderBookTrackerDataSource):
         trading_pair = await self._connector.trading_pair_associated_to_exchange_symbol(
             symbol=trade_data["currency_pair"])
         message_content = {
+            "exchange": self._connector.name,
             "trading_pair": trading_pair,
             "trade_type": (float(TradeType.SELL.value)
                            if trade_data["side"] == "sell"

@@ -2,10 +2,7 @@ from typing import Dict, Optional
 
 from hummingbot.core.data_type.common import TradeType
 from hummingbot.core.data_type.order_book import OrderBook
-from hummingbot.core.data_type.order_book_message import (
-    OrderBookMessage,
-    OrderBookMessageType
-)
+from hummingbot.core.data_type.order_book_message import OrderBookMessage, OrderBookMessageType
 
 
 class BinanceOrderBook(OrderBook):
@@ -65,6 +62,7 @@ class BinanceOrderBook(OrderBook):
             msg.update(metadata)
         ts = msg["E"]
         return OrderBookMessage(OrderBookMessageType.TRADE, {
+            "exchange": "binance",
             "trading_pair": msg["trading_pair"],
             "trade_type": float(TradeType.SELL.value) if msg["m"] else float(TradeType.BUY.value),
             "trade_id": msg["t"],

@@ -112,6 +112,7 @@ class BitmartAPIOrderBookDataSource(OrderBookTrackerDataSource):
         for trade_data in trade_updates:
             trading_pair = await self._connector.trading_pair_associated_to_exchange_symbol(symbol=trade_data["symbol"])
             message_content = {
+                "exchange": self._connector.name,
                 "trade_id": int(trade_data["s_t"]),
                 "trading_pair": trading_pair,
                 "trade_type": float(TradeType.BUY.value) if trade_data["side"] == "buy" else float(
