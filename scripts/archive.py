@@ -163,10 +163,13 @@ class Archive(ScriptStrategyBase):
         paper_trade_exchange = exchange + "_paper_trade"
         order_book = self.connectors[paper_trade_exchange].get_order_book(symbol)
         snapshot = order_book.snapshot
+        bid_len = len(snapshot[0])
+        ask_len = len(snapshot[1])
         book_dict = {"timestamp": datetime.fromtimestamp(self.current_timestamp).isoformat()}
-        for i in range(depth):
+        for i in range(min(depth, bid_len)):
             book_dict[f"bid_price_{i}"] = snapshot[0].loc[i]["price"]
             book_dict[f"bid_amount_{i}"] = snapshot[0].loc[i]["amount"]
+        for i in range(min(depth, ask_len)):
             book_dict[f"ask_price_{i}"] = snapshot[1].loc[i]["price"]
             book_dict[f"ask_amount_{i}"] = snapshot[1].loc[i]["amount"]
         return book_dict
