@@ -34,6 +34,9 @@ class Archive(ScriptStrategyBase):
     def init_markets(cls, config: ArchiveConfig):
         exchanges = config.exchanges
         symbols = config.symbols
+        for symbol in config.symbols_black_list:
+            if symbol in symbols:
+                symbols.remove(symbol)
         cls.markets = {}
         for exchange in exchanges:
             cls.markets[exchange] = set(symbols)
