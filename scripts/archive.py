@@ -18,6 +18,8 @@ class ArchiveConfig(BaseClientModel):
     exchanges: List[str] = Field(["kucoin_paper_trade", "binance_paper_trade"], client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the exchanges to archive:"))
     symbols: List[str] = Field(["BTC-USDT", "ETH-USDT"], client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the trading pairs to archive:"))
     depth: int = Field(10, client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the depth of the order book to archive:"))
+    buffer: int = Field(10, client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the buffer size for the order book to archive:"))
+    symbols_black_list: List[str] = Field([], client_data=ClientFieldData(prompt_on_new=True, prompt=lambda mi: "Enter the trading pairs to exclude from archiving:"))
 
 
 class Archive(ScriptStrategyBase):
@@ -26,7 +28,6 @@ class Archive(ScriptStrategyBase):
     subscribed_to_order_book_trade_event: bool = False
     connection = None
     last_dump_timestamp = 0
-    buffer_offset = 10
     exchanges = []
 
     @classmethod
@@ -42,11 +43,16 @@ class Archive(ScriptStrategyBase):
         self.config = config
         self.connect_to_db()
         self.order_book_trade_event = SourceInfoEventForwarder(self._process_public_trade)
+        for symbol in self.config.symbols_black_list:
+            if symbol in self.config.symbols:
+                self.config.symbols.remove(symbol)
+
         for exchange in self.config.exchanges:
             if "paper_trade" in exchange:
                 self.exchanges.append('_'.join(exchange.split("_")[:-2]))
             else:
                 self.exchanges.append(exchange)
+
         for exchange in self.exchanges:
             self.order_book_temp_storage[exchange] = {}
             self.trades_temp_storage[exchange] = {}
@@ -161,7 +167,7 @@ class Archive(ScriptStrategyBase):
                 for trade in trades:
                     self.write_trade_to_db(symbol, trade)
                 self.trades_temp_storage[exchange][symbol] = []
-        self.last_dump_timestamp = self.current_timestamp + self.buffer_offset
+        self.last_dump_timestamp = self.current_timestamp + self.config.buffer
 
     def get_order_book_dict(self, exchange: str, symbol: str, depth: int = 10):
         paper_trade_exchange = exchange + "_paper_trade"
