@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 import inspect
+import os
 import platform
 import sys
 import threading
@@ -244,8 +245,19 @@ class StartCommand(GatewayChainApiManager):
 
     @staticmethod
     def load_script_yaml_config(config_file_path: str) -> dict:
+        class Loader(yaml.SafeLoader):
+            def __init__(self, stream):
+                self._root = os.path.split(stream.name)[0]
+                super(Loader, self).__init__(stream)
+
+            def include(self, node):
+                filename = os.path.join(self._root, self.construct_scalar(node))
+                with open(filename, 'r') as f:
+                    return yaml.load(f, Loader)
+
+        Loader.add_constructor('!include', Loader.include)
         with open(settings.SCRIPT_STRATEGY_CONFIG_PATH / config_file_path, 'r') as file:
-            return yaml.safe_load(file)
+            return yaml.load(file, Loader)
 
     def is_current_strategy_script_strategy(self) -> bool:
         script_file_name = settings.SCRIPT_STRATEGIES_PATH / f"{self.strategy_name}.py"
