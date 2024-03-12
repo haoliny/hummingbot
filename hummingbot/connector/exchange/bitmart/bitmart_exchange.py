@@ -121,7 +121,7 @@ class BitmartExchange(ExchangePyBase):
         :return a list of OrderType supported by this connector.
         Note that Market order type is no longer required and will not be used.
         """
-        return [OrderType.LIMIT, OrderType.LIMIT_MAKER]
+        return [OrderType.LIMIT, OrderType.LIMIT_MAKER, OrderType.MARKET]
 
     def _is_request_exception_related_to_time_synchronizer(self, request_exception: Exception):
         error_description = str(request_exception)
@@ -190,7 +190,7 @@ class BitmartExchange(ExchangePyBase):
 
         api_params = {"symbol": await self.exchange_symbol_associated_to_pair(trading_pair),
                       "side": trade_type.name.lower(),
-                      "type": "limit",
+                      "type": order_type.name.lower(),
                       "size": f"{amount:f}",
                       "price": f"{price:f}",
                       "clientOrderId": order_id,

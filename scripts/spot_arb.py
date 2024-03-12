@@ -41,11 +41,11 @@ class XEArb(ScriptStrategyBase):
         if is_buy_A_sell_B:
             buy_balance = self.connectors[self.config.exchange_A].get_available_balance(self.config.quote)
             sell_balance = self.connectors[self.config.exchange_B].get_available_balance(self.config.base)
-            return buy_balance >= buy_price * order_size and sell_balance >= order_size
+            return buy_balance >= (buy_price * order_size) and sell_balance >= order_size
         else:
             buy_balance = self.connectors[self.config.exchange_B].get_available_balance(self.config.quote)
             sell_balance = self.connectors[self.config.exchange_A].get_available_balance(self.config.base)
-            return buy_balance >= buy_price * order_size and sell_balance >= order_size
+            return buy_balance >= (buy_price * order_size) and sell_balance >= order_size
 
     def on_tick(self):
         prices_sizes = self.get_prices_sizes()
