@@ -94,14 +94,14 @@ class XEArb(ScriptStrategyBase):
             "buy_a_sell_b":
                 {
                     "quote_diff": buy_a_sell_b_quote,
-                    "profitability_pct": buy_a_sell_b_quote / buy_a_sell_b_base,
+                    "profitability_pct": buy_a_sell_b_quote / buy_a_sell_b_size,
                     "order_size": buy_a_sell_b_size,
                 },
             "buy_b_sell_a":
                 {
                     "quote_diff": buy_b_sell_a_quote,
                     "order_size": buy_b_sell_a_size,
-                    "profitability_pct": buy_b_sell_a_quote / buy_b_sell_a_base,
+                    "profitability_pct": buy_b_sell_a_quote / buy_a_sell_b_size,
                 },
         }
 
