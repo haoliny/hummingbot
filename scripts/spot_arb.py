@@ -37,6 +37,16 @@ class XEArb(ScriptStrategyBase):
         self.config = config
         self.total_potential_profit = Decimal(0.0)
 
+    def check_position_limit(self, buy_price, order_size, is_buy_A_sell_B: bool) -> bool:
+        if is_buy_A_sell_B:
+            buy_balance = self.connectors[self.config.exchange_A].get_available_balance(self.config.quote)
+            sell_balance = self.connectors[self.config.exchange_B].get_available_balance(self.config.base)
+            return buy_balance >= buy_price * order_size and sell_balance >= order_size
+        else:
+            buy_balance = self.connectors[self.config.exchange_B].get_available_balance(self.config.quote)
+            sell_balance = self.connectors[self.config.exchange_A].get_available_balance(self.config.base)
+            return buy_balance >= buy_price * order_size and sell_balance >= order_size
+
     def on_tick(self):
         prices_sizes = self.get_prices_sizes()
         proposal = self.check_profitability_and_create_proposal(prices_sizes)
@@ -99,27 +109,35 @@ class XEArb(ScriptStrategyBase):
         proposal = {}
         profitability_analysis = self.get_profitability_analysis(prices_sizes)
         if profitability_analysis["buy_a_sell_b"]["profitability_pct"] > self.config.min_profitability:
-            # This means that the ask of the first exchange is lower than the bid of the second one
-            proposal[self.config.exchange_A] = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=False,
-                                                       order_type=OrderType.MARKET,
-                                                       order_side=TradeType.BUY, amount=profitability_analysis["buy_a_sell_b"]["order_size"],
-                                                       price=prices_sizes[self.config.exchange_A]["ask"])
-            proposal[self.config.exchange_B] = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=False,
-                                                       order_type=OrderType.MARKET,
-                                                       order_side=TradeType.SELL, amount=profitability_analysis["buy_a_sell_b"]["order_size"],
-                                                       price=prices_sizes[self.config.exchange_B]["bid"])
-            self.total_potential_profit = profitability_analysis["buy_a_sell_b"]["quote_diff"] * profitability_analysis["buy_a_sell_b"]["order_size"]
+            order_size = profitability_analysis["buy_a_sell_b"]["order_size"]
+            buy_price = prices_sizes[self.config.exchange_A]["ask"]
+            ask_price = prices_sizes[self.config.exchange_B]["bid"]
+            if self.check_position_limit(buy_price, order_size, True):
+                # This means that the ask of the first exchange is lower than the bid of the second one
+                proposal[self.config.exchange_A] = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=False,
+                                                        order_type=OrderType.MARKET,
+                                                        order_side=TradeType.BUY, amount=order_size,
+                                                        price=buy_price)
+                proposal[self.config.exchange_B] = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=False,
+                                                        order_type=OrderType.MARKET,
+                                                        order_side=TradeType.SELL, amount=order_size,
+                                                        price=ask_price)
+                self.total_potential_profit += profitability_analysis["buy_a_sell_b"]["quote_diff"] * profitability_analysis["buy_a_sell_b"]["order_size"]
         elif profitability_analysis["buy_b_sell_a"]["profitability_pct"] > self.config.min_profitability:
-            # This means that the ask of the second exchange is lower than the bid of the first one
-            proposal[self.config.exchange_B] = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=False,
-                                                       order_type=OrderType.MARKET,
-                                                       order_side=TradeType.BUY, amount=profitability_analysis["buy_b_sell_a"]["order_size"],
-                                                       price=prices_sizes[self.config.exchange_B]["ask"])
-            proposal[self.config.exchange_A] = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=False,
-                                                       order_type=OrderType.MARKET,
-                                                       order_side=TradeType.SELL, amount=profitability_analysis["buy_b_sell_a"]["order_size"],
-                                                       price=prices_sizes[self.config.exchange_A]["bid"])
-            self.total_potential_profit = profitability_analysis["buy_b_sell_a"]["quote_diff"] * profitability_analysis["buy_b_sell_a"]["order_size"]
+            order_size = profitability_analysis["buy_b_sell_a"]["order_size"]
+            buy_price = prices_sizes[self.config.exchange_B]["ask"]
+            ask_price = prices_sizes[self.config.exchange_A]["bid"]
+            if self.check_position_limit(buy_price, order_size, False):
+                # This means that the ask of the second exchange is lower than the bid of the first one
+                proposal[self.config.exchange_B] = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=False,
+                                                        order_type=OrderType.MARKET,
+                                                        order_side=TradeType.BUY, amount=order_size,
+                                                        price=buy_price)
+                proposal[self.config.exchange_A] = OrderCandidate(trading_pair=self.config.trading_pair, is_maker=False,
+                                                        order_type=OrderType.MARKET,
+                                                        order_side=TradeType.SELL, amount=order_size,
+                                                        price=ask_price)
+            self.total_potential_profit += profitability_analysis["buy_b_sell_a"]["quote_diff"] * profitability_analysis["buy_b_sell_a"]["order_size"]
 
         return proposal
 
