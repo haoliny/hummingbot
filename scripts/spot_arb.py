@@ -108,7 +108,7 @@ class XEArb(ScriptStrategyBase):
     def check_profitability_and_create_proposal(self, prices_sizes: Dict[str, Any]) -> Dict:
         proposal = {}
         profitability_analysis = self.get_profitability_analysis(prices_sizes)
-        if profitability_analysis["buy_a_sell_b"]["profitability_pct"] > self.config.min_profitability:
+        if profitability_analysis["buy_a_sell_b"]["quote_diff"] > self.config.min_profitability:
             order_size = profitability_analysis["buy_a_sell_b"]["order_size"]
             buy_price = prices_sizes[self.config.exchange_A]["ask"]
             ask_price = prices_sizes[self.config.exchange_B]["bid"]
@@ -123,7 +123,7 @@ class XEArb(ScriptStrategyBase):
                                                         order_side=TradeType.SELL, amount=order_size,
                                                         price=ask_price)
                 self.total_potential_profit += profitability_analysis["buy_a_sell_b"]["quote_diff"] * profitability_analysis["buy_a_sell_b"]["order_size"]
-        elif profitability_analysis["buy_b_sell_a"]["profitability_pct"] > self.config.min_profitability:
+        elif profitability_analysis["buy_b_sell_a"]["quote_diff"] > self.config.min_profitability:
             order_size = profitability_analysis["buy_b_sell_a"]["order_size"]
             buy_price = prices_sizes[self.config.exchange_B]["ask"]
             ask_price = prices_sizes[self.config.exchange_A]["bid"]
