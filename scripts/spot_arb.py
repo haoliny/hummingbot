@@ -81,13 +81,13 @@ class XEArb(ScriptStrategyBase):
 
     def get_profitability_analysis(self, prices_sizes: Dict[str, Any]) -> Dict:
         buy_a_sell_b_size = min(prices_sizes[self.config.exchange_A]["ask_size"], prices_sizes[self.config.exchange_B]["bid_size"], self.config.max_order_amount)
-        buy_a_sell_b_quote = prices_sizes[self.config.exchange_A]["ask"] * (1 - self.config.exchange_A_fee) * buy_a_sell_b_size - \
-            prices_sizes[self.config.exchange_B]["bid"] * (1 + self.config.exchange_B_fee) * buy_a_sell_b_size
+        buy_a_sell_b_quote = prices_sizes[self.config.exchange_B]["bid"] * (1 - self.config.exchange_A_fee) * buy_a_sell_b_size - \
+            prices_sizes[self.config.exchange_A]["ask"] * (1 + self.config.exchange_B_fee) * buy_a_sell_b_size
         buy_a_sell_b_base = (prices_sizes[self.config.exchange_A]["ask"] + prices_sizes[self.config.exchange_B]["bid"]) / 2
 
         buy_b_sell_a_size = min(prices_sizes[self.config.exchange_B]["ask_size"], prices_sizes[self.config.exchange_A]["bid_size"], self.config.max_order_amount)
-        buy_b_sell_a_quote = prices_sizes[self.config.exchange_B]["ask"] * (1 - self.config.exchange_B_fee) * buy_b_sell_a_size - \
-            prices_sizes[self.config.exchange_A]["bid"] * (1 + self.config.exchange_A_fee) * buy_b_sell_a_size
+        buy_b_sell_a_quote = prices_sizes[self.config.exchange_A]["bid"] * (1 - self.config.exchange_B_fee) * buy_b_sell_a_size - \
+            prices_sizes[self.config.exchange_B]["ask"] * (1 + self.config.exchange_A_fee) * buy_b_sell_a_size
         buy_b_sell_a_base = (prices_sizes[self.config.exchange_B]["ask"] + prices_sizes[self.config.exchange_A]["bid"]) / 2
 
         return {
